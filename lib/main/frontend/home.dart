@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:camera/camera.dart';
 import 'dart:async';
 import 'dart:math';
-
 class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
@@ -17,8 +18,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   late AnimationController _waveController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _waveAnimation;
+  String? _username = 'User';
+  CameraController? _cameraController;
+  List<CameraDescription>? _cameras;
+  bool _isCameraInitialized = false;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Mock data for recent sessions
   final List<Map<String, dynamic>> _recentSessions = [
     {'date': 'Today', 'duration': '2h 15m', 'alertness': 92, 'status': 'Excellent'},
     {'date': 'Yesterday', 'duration': '1h 45m', 'alertness': 78, 'status': 'Good'},
@@ -28,6 +33,8 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _fetchUsername();
+    _initializeCamera();
     _pulseController = AnimationController(
       duration: Duration(seconds: 2),
       vsync: this,
@@ -52,11 +59,74 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     ).animate(_waveController);
   }
 
+  Future<void> _initializeCamera() async {
+    try {
+      _cameras = await availableCameras();
+      if (_cameras != null && _cameras!.isNotEmpty) {
+        _cameraController = CameraController(
+          _cameras![0],
+          ResolutionPreset.medium,
+        );
+        await _cameraController!.initialize();
+        setState(() {
+          _isCameraInitialized = true;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No camera available on this device.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to initialize camera: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _fetchUsername() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final fullName = user.userMetadata?['full_name'] as String?;
+        setState(() {
+          _username = fullName ?? 'User';
+        });
+      }
+    } catch (error) {
+      setState(() {
+        _username = 'User';
+      });
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.auth.signOut();
+      Navigator.of(context).pushReplacementNamed('/login');
+    } catch (error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error logging out: $error'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _sessionTimer?.cancel();
     _pulseController.dispose();
     _waveController.dispose();
+    _cameraController?.dispose();
     super.dispose();
   }
 
@@ -72,11 +142,23 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   void _startSession() {
+    if (!_isCameraInitialized || _cameraController == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Camera not initialized. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      setState(() {
+        _isMonitoring = false;
+      });
+      return;
+    }
+
     _sessionTime = 0;
     _sessionTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       setState(() {
         _sessionTime++;
-        // Simulate changing alertness score
         _alertnessScore = 50 + (sin(_sessionTime * 0.1) * 30) + 20;
         if (_alertnessScore > 80) {
           _alertnessLevel = 'Alert';
@@ -91,6 +173,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   void _stopSession() {
     _sessionTimer?.cancel();
+    if (_cameraController != null && _cameraController!.value.isStreamingImages) {
+      _cameraController!.stopImageStream();
+    }
   }
 
   String _formatTime(int seconds) {
@@ -100,7 +185,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
-  Color _getAlertnesColor() {
+  Color _getAlertnessColor() {
     if (_alertnessScore > 80) return Colors.green;
     if (_alertnessScore > 60) return Colors.orange;
     return Colors.red;
@@ -109,6 +194,59 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      endDrawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF6C63FF),
+                    Color(0xFF4FACFE),
+                  ],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Settings',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    _username ?? 'User',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white.withOpacity(0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.gamepad, color: Color(0xFF6C63FF)),
+              title: Text('Flappy Bird', style: TextStyle(fontSize: 16)),
+              onTap: () {
+                Navigator.of(context).pushNamed('/flappybird');
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.logout, color: Colors.red),
+              title: Text('Log Out', style: TextStyle(fontSize: 16)),
+              onTap: () async {
+                await _logout();
+              },
+            ),
+          ],
+        ),
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -127,7 +265,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -142,7 +279,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ),
                         ),
                         Text(
-                          'John Doe',
+                          _username ?? 'User',
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
@@ -151,24 +288,26 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(
-                        Icons.settings,
-                        color: Colors.white,
-                        size: 24,
+                    GestureDetector(
+                      onTap: () {
+                        _scaffoldKey.currentState?.openEndDrawer();
+                      },
+                      child: Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          Icons.settings,
+                          color: Colors.white,
+                          size: 24,
+                        ),
                       ),
                     ),
                   ],
                 ),
-
                 SizedBox(height: 32),
-
-                // Main Monitor Card
                 Container(
                   padding: EdgeInsets.all(32),
                   decoration: BoxDecoration(
@@ -192,14 +331,26 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           color: Color(0xFF2D3748),
                         ),
                       ),
-                      
                       SizedBox(height: 24),
-                      
-                      // Eye Animation/Status
                       Stack(
                         alignment: Alignment.center,
                         children: [
-                          if (_isMonitoring)
+                          if (_isMonitoring && _isCameraInitialized && _cameraController != null) ...[
+                            Container(
+                              width: 200,
+                              height: 200,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: _getAlertnessColor(),
+                                  width: 3,
+                                ),
+                              ),
+                              child: ClipOval(
+                                child: CameraPreview(_cameraController!),
+                              ),
+                            ),
+                          ] else ...[
                             AnimatedBuilder(
                               animation: _waveAnimation,
                               builder: (context, child) {
@@ -209,53 +360,51 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: _getAlertnesColor().withOpacity(0.3),
+                                      color: _getAlertnessColor().withOpacity(0.3),
                                       width: 2,
                                     ),
                                   ),
                                 );
                               },
                             ),
-                          AnimatedBuilder(
-                            animation: _isMonitoring ? _pulseAnimation : _pulseController,
-                            builder: (context, child) {
-                              return Transform.scale(
-                                scale: _isMonitoring ? _pulseAnimation.value : 1.0,
-                                child: Container(
-                                  width: 150,
-                                  height: 150,
-                                  decoration: BoxDecoration(
-                                    color: _isMonitoring 
-                                        ? _getAlertnesColor().withOpacity(0.1)
-                                        : Color(0xFF6C63FF).withOpacity(0.1),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: _isMonitoring ? _getAlertnesColor() : Color(0xFF6C63FF),
-                                      width: 3,
+                            AnimatedBuilder(
+                              animation: _isMonitoring ? _pulseAnimation : _pulseController,
+                              builder: (context, child) {
+                                return Transform.scale(
+                                  scale: _isMonitoring ? _pulseAnimation.value : 1.0,
+                                  child: Container(
+                                    width: 150,
+                                    height: 150,
+                                    decoration: BoxDecoration(
+                                      color: _isMonitoring 
+                                          ? _getAlertnessColor().withOpacity(0.1)
+                                          : Color(0xFF6C63FF).withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: _isMonitoring ? _getAlertnessColor() : Color(0xFF6C63FF),
+                                        width: 3,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      _isMonitoring ? Icons.visibility : Icons.remove_red_eye_outlined,
+                                      size: 60,
+                                      color: _isMonitoring ? _getAlertnessColor() : Color(0xFF6C63FF),
                                     ),
                                   ),
-                                  child: Icon(
-                                    _isMonitoring ? Icons.visibility : Icons.remove_red_eye_outlined,
-                                    size: 60,
-                                    color: _isMonitoring ? _getAlertnesColor() : Color(0xFF6C63FF),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                                );
+                              },
+                            ),
+                          ],
                         ],
                       ),
-                      
                       SizedBox(height: 24),
-                      
                       if (_isMonitoring) ...[
-                        // Alertness Level
                         Text(
                           _alertnessLevel,
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
-                            color: _getAlertnesColor(),
+                            color: _getAlertnessColor(),
                           ),
                         ),
                         Text(
@@ -265,10 +414,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             color: Color(0xFF718096),
                           ),
                         ),
-                        
                         SizedBox(height: 16),
-                        
-                        // Progress Bar
                         Container(
                           width: double.infinity,
                           height: 8,
@@ -281,16 +427,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                             alignment: Alignment.centerLeft,
                             child: Container(
                               decoration: BoxDecoration(
-                                color: _getAlertnesColor(),
+                                color: _getAlertnessColor(),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                             ),
                           ),
                         ),
-                        
                         SizedBox(height: 24),
-                        
-                        // Session Time
                         Text(
                           'Session Time',
                           style: TextStyle(
@@ -307,10 +450,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ),
                         ),
                       ],
-                      
                       SizedBox(height: 32),
-                      
-                      // Start/Stop Button
                       Container(
                         width: double.infinity,
                         height: 56,
@@ -351,10 +491,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-
                 SizedBox(height: 32),
-
-                // Stats Grid
                 Row(
                   children: [
                     Expanded(
@@ -442,10 +579,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                     ),
                   ],
                 ),
-
                 SizedBox(height: 24),
-
-                // Recent Sessions
                 Container(
                   padding: EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -483,9 +617,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                           ),
                         ],
                       ),
-                      
                       SizedBox(height: 20),
-                      
                       ...List.generate(_recentSessions.length, (index) {
                         final session = _recentSessions[index];
                         return Container(
