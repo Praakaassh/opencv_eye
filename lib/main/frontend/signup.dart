@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignUpPage extends StatefulWidget {
@@ -88,14 +89,12 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       final password = _passwordController.text;
       final name = _nameController.text.trim();
 
-      // Sign up user with Supabase Auth
       final response = await supabase.auth.signUp(
         email: email,
         password: password,
-        data: {'full_name': name}, // Store full name in user metadata
+        data: {'full_name': name},
       );
 
-      // Check if signup was successful
       if (response.user != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -113,7 +112,6 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
           ),
         );
 
-        // Navigate to login page
         Navigator.pushReplacementNamed(context, '/login');
       }
     } catch (error) {
@@ -141,6 +139,84 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
       });
     }
   }
+void _showTermsBottomSheet(bool isTerms) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.all(24), // Correct placement of padding
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 60,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              isTerms ? 'Terms of Service' : 'Privacy Policy',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2D3748),
+              ),
+            ),
+            SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Text(
+                  isTerms
+                      ? 'Effective date 01-06-2025. Welcome to DrowsyGuard. By using this app you agree to these terms. DrowsyGuard helps monitor alertness for your safety. Use the app responsibly and follow all applicable laws. You are responsible for keeping your account login details secure and for all activities under your account. We respect your privacy; please review our Privacy Policy for more information. Do not misuse the app or attempt to access it unlawfully. The app is provided as is without any warranties and we do not guarantee it will detect every drowsiness event. We are not liable for any damages resulting from the use of this app. These terms may be updated from time to time and continued use of the app means you accept the changes. For any questions please contact support at drowsyguard dot app.'
+                      : 'Your privacy is important to us. It is our policy to respect your privacy regarding any information we may collect from you across our application. We only ask for personal information when we truly need it to provide a service to you. We collect it by fair and lawful means, with your knowledge and consent.\n\nWe only retain collected information for as long as necessary to provide you with your requested service. What data we store, we\'ll protect within commercially acceptable means to prevent loss and theft, as well as unauthorized access, disclosure, copying, use or modification.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFF4A5568),
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF6C63FF),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text(
+                  'I Understand',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildInputField({
     required TextEditingController controller,
@@ -204,9 +280,9 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
             begin: Alignment.topRight,
             end: Alignment.bottomLeft,
             colors: [
-              Color(0xFF4FACFE),  // Light blue
-              Color(0xFF6C63FF),  // Blue-purple
-              Color(0xFF8B5FBF),  // Purple
+              Color(0xFF4FACFE),
+              Color(0xFF6C63FF),
+              Color(0xFF8B5FBF),
             ],
           ),
         ),
@@ -405,9 +481,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                             SizedBox(height: 20),
                             
                             // Terms and Conditions
-                            Row
-
-(
+                            Row(
                               children: [
                                 Transform.scale(
                                   scale: 1.2,
@@ -439,6 +513,8 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                             color: Color(0xFF6C63FF),
                                             fontWeight: FontWeight.w600,
                                           ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () => _showTermsBottomSheet(true),
                                         ),
                                         TextSpan(text: ' and '),
                                         TextSpan(
@@ -447,6 +523,8 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                             color: Color(0xFF6C63FF),
                                             fontWeight: FontWeight.w600,
                                           ),
+                                          recognizer: TapGestureRecognizer()
+                                            ..onTap = () => _showTermsBottomSheet(false),
                                         ),
                                       ],
                                     ),
