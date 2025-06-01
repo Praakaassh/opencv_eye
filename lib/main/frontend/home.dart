@@ -9,12 +9,14 @@ import 'dart:math';
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  ModelHandler _modelHandler = ModelHandler();
+  final ModelHandler _modelHandler = ModelHandler();
   bool _isMonitoring = false;
   String _alertnessLevel = 'Alert';
   double _alertnessScore = 85.0;

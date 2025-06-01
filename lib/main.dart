@@ -19,6 +19,8 @@ Future<void> main() async {
 final supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -39,6 +41,8 @@ class MyApp extends StatelessWidget {
 }
 
 class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
   @override
   _AuthWrapperState createState() => _AuthWrapperState();
 }

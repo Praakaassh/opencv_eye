@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:lottie/lottie.dart';
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -227,7 +229,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                         child: Column(
                           children: [
-                            Container(
+                            SizedBox(
                               width: 100,
                               height: 100,
                               child: Lottie.asset(

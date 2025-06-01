@@ -20,7 +20,7 @@ class _FlappyBirdPageState extends State<FlappyBirdPage> with TickerProviderStat
   static const double _maxVelocity = 8.0;
 
   // Pipe properties
-  List<Map<String, dynamic>> _pipes = [];
+  final List<Map<String, dynamic>> _pipes = [];
   static const double _pipeGap = 200.0;
   static const double _pipeWidth = 60.0;
   static const double _pipeSpeed = 2.0;
@@ -280,7 +280,7 @@ class _FlappyBirdPageState extends State<FlappyBirdPage> with TickerProviderStat
                             ),
                           ],
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                 ),
