@@ -83,36 +83,51 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
     });
 
     try {
-      // Simulate API call - replace with actual Supabase auth
-      await Future.delayed(Duration(seconds: 2));
-      
-      // Mock successful signup
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: 8),
-              Text('Account created! Check your email for verification.'),
-            ],
-          ),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: Duration(seconds: 4),
-        ),
+      final supabase = Supabase.instance.client;
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final name = _nameController.text.trim();
+
+      // Sign up user with Supabase Auth
+      final response = await supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': name}, // Store full name in user metadata
       );
-      
-      // Navigate to login page
-      Navigator.pushReplacementNamed(context, '/login');
+
+      // Check if signup was successful
+      if (response.user != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Account created! Check your email for verification.'),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: Duration(seconds: 4),
+          ),
+        );
+
+        // Navigate to login page
+        Navigator.pushReplacementNamed(context, '/login');
+      }
     } catch (error) {
+      String errorMessage = 'Registration failed. Please try again.';
+      if (error is AuthException) {
+        errorMessage = error.message;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               Icon(Icons.error_outline, color: Colors.white),
               SizedBox(width: 8),
-              Text('Registration failed. Please try again.'),
+              Text(errorMessage),
             ],
           ),
           backgroundColor: Colors.red,
@@ -234,7 +249,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                                 ],
                               ),
                               child: Icon(
-                                Icons.person_add_outlined,
+                                Icons.remove_red_eye_sharp,
                                 size: 40,
                                 color: Color(0xFF6C63FF),
                               ),
@@ -390,7 +405,9 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                             SizedBox(height: 20),
                             
                             // Terms and Conditions
-                            Row(
+                            Row
+
+(
                               children: [
                                 Transform.scale(
                                   scale: 1.2,
@@ -544,7 +561,7 @@ class _SignUpPageState extends State<SignUpPage> with TickerProviderStateMixin {
                             ),
                             SizedBox(height: 8),
                             Text(
-                              'Powered by AI • GDPR Compliant',
+                              'Powered by AI • SPJS Compliant',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.7),
                                 fontSize: 12,

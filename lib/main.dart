@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:opencv_eye/main/frontend/game.dart';
 import 'package:opencv_eye/main/frontend/home.dart';
 import 'package:opencv_eye/main/frontend/login.dart';
 import 'package:opencv_eye/main/frontend/signup.dart';
@@ -31,6 +32,7 @@ class MyApp extends StatelessWidget {
         '/login': (context) => LoginPage(),
         '/signup': (context) => SignUpPage(),
         '/home': (context) => HomePage(),
+        '/flappybird': (context) => FlappyBirdPage (),
       },
     );
   }
