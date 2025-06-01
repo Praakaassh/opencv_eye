@@ -3,6 +3,8 @@ import 'package:flutter/gestures.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key});
+
   @override
   _SignUpPageState createState() => _SignUpPageState();
 }
