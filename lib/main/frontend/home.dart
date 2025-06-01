@@ -1,14 +1,20 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:opencv_eye/main/frontend/clickhere.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:camera/camera.dart';
 import 'dart:async';
 import 'dart:math';
+import 'package:image/image.dart' as img;
+import 'package:tflite_flutter/tflite_flutter.dart';
 class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+  ModelHandler _modelHandler = ModelHandler();
   bool _isMonitoring = false;
   String _alertnessLevel = 'Alert';
   double _alertnessScore = 85.0;
@@ -105,7 +111,33 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       });
     }
   }
+Float32List preprocessCameraImage(CameraImage cameraImage) {
+  // Convert YUV420 to grayscale using Y channel
+  final yPlane = cameraImage.planes[0].bytes;
+  img.Image grayscale = img.Image(width: cameraImage.width, height: cameraImage.height);
 
+  for (var y = 0; y < cameraImage.height; y++) {
+    for (var x = 0; x < cameraImage.width; x++) {
+      final yIndex = y * cameraImage.width + x;
+      grayscale.setPixelRgb(x, y, yPlane[yIndex], yPlane[yIndex], yPlane[yIndex]);
+    }
+  }
+
+  // Resize to 100x100
+  img.Image resized = img.copyResize(grayscale, width: 100, height: 100);
+
+  // Convert to Float32List and normalize to [0, 1]
+  var input = Float32List(100 * 100);
+  int pixelIndex = 0;
+  for (var y = 0; y < 100; y++) {
+    for (var x = 0; x < 100; x++) {
+      var pixel = resized.getPixel(x, y);
+      input[pixelIndex++] = (pixel.r / 127.5) - 1.0; // Normalize to [-1, 1] // Grayscale value normalized
+    }
+  }
+
+  return input;
+}
   Future<void> _logout() async {
     try {
       final supabase = Supabase.instance.client;
@@ -142,41 +174,77 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
   }
 
   void _startSession() {
-    if (!_isCameraInitialized || _cameraController == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Camera not initialized. Please try again.'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      setState(() {
-        _isMonitoring = false;
-      });
-      return;
-    }
-
-    _sessionTime = 0;
-    _sessionTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {
-        _sessionTime++;
-        _alertnessScore = 50 + (sin(_sessionTime * 0.1) * 30) + 20;
-        if (_alertnessScore > 80) {
-          _alertnessLevel = 'Alert';
-        } else if (_alertnessScore > 60) {
-          _alertnessLevel = 'Moderate';
-        } else {
-          _alertnessLevel = 'Drowsy';
-        }
-      });
+  if (!_isCameraInitialized || _cameraController == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Camera not initialized. Please try again.'),
+        backgroundColor: Colors.red,
+      ),
+    );
+    setState(() {
+      _isMonitoring = false;
     });
+    return;
   }
 
-  void _stopSession() {
-    _sessionTimer?.cancel();
-    if (_cameraController != null && _cameraController!.value.isStreamingImages) {
-      _cameraController!.stopImageStream();
-    }
+  _sessionTime = 0;
+  _sessionTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    setState(() {
+      _sessionTime++;
+    });
+  });
+
+  // Initialize ModelHandler
+  _modelHandler.loadModel().then((_) {
+    // Start camera image stream
+    int frameCount = 0; // For frame skipping
+    _cameraController!.startImageStream((CameraImage cameraImage) async {
+      if (!_isMonitoring) return; // Stop processing if monitoring is off
+      if (frameCount % 5 != 0) { // Process every 5th frame for performance
+        frameCount++;
+        return;
+      }
+      frameCount++;
+
+      // Log camera details for debugging
+      print('Camera format: ${cameraImage.format.group}, ${cameraImage.width}x${cameraImage.height}');
+
+      // Preprocess image to 100x100 grayscale
+      var inputTensor = preprocessCameraImage(cameraImage).reshape([1, 100, 100, 1]);
+
+      // Prepare output tensor for single value
+      var outputTensor = Float32List(1).reshape([1, 1]);
+
+      // Run inference
+      try {
+        _modelHandler.interpreter!.run(inputTensor, outputTensor);
+        // Update alertness score based on model output
+        setState(() {
+          _alertnessScore = outputTensor[0][0]; // Use raw output if not a probability; // Scale to 0-100
+          if (_alertnessScore > 80) {
+            _alertnessLevel = 'Alert';
+          } else if (_alertnessScore > 60) {
+            _alertnessLevel = 'Moderate';
+          } else {
+            _alertnessLevel = 'Drowsy';
+          }
+        });
+        print('Model output: $outputTensor');
+      } catch (e) {
+        print('Inference error: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Inference failed: $e')),
+        );
+      }
+    });
+  });
+}
+ void _stopSession() {
+  _sessionTimer?.cancel();
+  if (_cameraController != null && _cameraController!.value.isStreamingImages) {
+    _cameraController!.stopImageStream();
   }
+}
 
   String _formatTime(int seconds) {
     int hours = seconds ~/ 3600;
@@ -451,43 +519,71 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
                         ),
                       ],
                       SizedBox(height: 32),
-                      Container(
-                        width: double.infinity,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: _isMonitoring 
-                                ? [Colors.red, Colors.redAccent]
-                                : [Color(0xFF6C63FF), Color(0xFF4FACFE)],
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (_isMonitoring ? Colors.red : Color(0xFF6C63FF)).withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: ElevatedButton(
-                          onPressed: _toggleMonitoring,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            shadowColor: Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: Text(
-                            _isMonitoring ? 'Stop Monitoring' : 'Start Monitoring',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
+                      Column(
+  children: [
+    Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: _isMonitoring
+              ? [Colors.red, Colors.redAccent]
+              : [Color(0xFF6C63FF), Color(0xFF4FACFE)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: (_isMonitoring ? Colors.red : Color(0xFF6C63FF)).withOpacity(0.3),
+            blurRadius: 12,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: _toggleMonitoring,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Text(
+          _isMonitoring ? 'Stop Monitoring' : 'Start Monitoring',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    ),
+    const SizedBox(height: 16),
+    ElevatedButton(
+    onPressed: () {
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const ClickHerePage()),
+  );
+},
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Color(0xFF4FACFE),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+      ),
+      child: const Text(
+        'Click Here',
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.white,
+        ),
+      ),
+    ),
+  ],
+)
+
                     ],
                   ),
                 ),
